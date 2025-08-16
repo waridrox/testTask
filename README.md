@@ -2,7 +2,7 @@
 A web app built with vanilla JS, HTML and CSS that displays genome assembly info for various species using the Ensembl REST API.
 
 ## Usage
-1. Open `index.html` in any web browser.
+1. Open `index.html` in any web browser or visit https://waridrox.github.io/testTask.
 2. Select a species from the dropdown menu.
 3. View the assembly information including species name, total genome length and individual chromosome lengths
 
@@ -12,7 +12,7 @@ A web app built with vanilla JS, HTML and CSS that displays genome assembly info
 
 ## API Calls
 - [Species Endpoint](https://rest.ensembl.org/documentation/info/species)
-- [Assembly Endpoint](https://rest.ensembl.org/documentation/info/assembly)
+- [Assembly Endpoint](https://rest.ensembl.org/documentation/info/assembly_info)
 
 ```bash
 curl 'https://rest.ensembl.org/info/species?' -H 'Content-type: application/json'
