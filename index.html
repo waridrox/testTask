@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Species Assembly Summaries</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #ffffff;
+        }
+        
+        h1 {
+            color: #000000;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .controls {
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        select {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #ffffff;
+        }
+        
+        select:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+        
+        .results {
+            background: white;
+            border-radius: 4px;
+            display: none;
+        }
+        
+        .species-info {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .species-name {
+            font-size: 24px;
+            font-weight: bold;
+            color: #000000;
+            margin-bottom: 10px;
+            text-transform: capitalize;
+        }
+        
+        .total-length {
+            font-size: 16px;
+            color: #666;
+        }
+        
+        .chromosome-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .chromosome {
+            display: flex;
+            align-items: center;
+            padding: 10px 20px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .chromosome:nth-child(odd) {
+            background-color: #f9f9f9;
+        }
+        
+        .chr-number {
+            font-weight: bold;
+            min-width: 50px;
+            color: #000000;
+        }
+        
+        .chr-length {
+            margin-left: 10px;
+            color: #666;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #666;
+            padding: 40px;
+            font-style: italic;
+        }
+        
+        .error {
+            color: #ff0000;
+            background-color: #ffebee;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Species Assembly Summaries</h1>
+    
+    <div class="controls">
+        <label for="species-select">Species:</label>
+        <select id="species-select">
+            <option value="">Loading species...</option>
+        </select>
+    </div>
+    
+    <div id="results" class="results">
+        <div id="loading" class="loading">Loading assembly information...</div>
+        <div id="species-content" style="display: none;">
+            <div class="species-info">
+                <div id="species-name" class="species-name"></div>
+                <div id="total-length" class="total-length"></div>
+            </div>
+            <div id="chromosome-list" class="chromosome-list"></div>
+        </div>
+        <div id="error" class="error" style="display: none;"></div>
+    </div>
+
+    <script>
+        // API url
+        const API_URL = 'https://rest.ensembl.org';
+        
+        // DOM elements
+        const elements = {
+            speciesSelect: document.getElementById('species-select'),
+            resultsDiv: document.getElementById('results'),
+            loadingDiv: document.getElementById('loading'),
+            speciesContent: document.getElementById('species-content'),
+            errorDiv: document.getElementById('error'),
+            speciesNameDiv: document.getElementById('species-name'),
+            totalLengthDiv: document.getElementById('total-length'),
+            chromosomeListDiv: document.getElementById('chromosome-list')
+        };
+
+        const loadSpeciesList = async () => {
+            try {
+                const response = await fetch(`${API_URL}/info/species`, {
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                const validSpecies = data.species.filter(species => 
+                    species.groups && species.groups.includes('variation')
+                );
+                
+                populateDropdown(validSpecies);
+                
+            } catch (error) {
+                console.error('Error loading species:', error);
+                elements.speciesSelect.innerHTML = '<option value="">Error loading species</option>';
+            }
+        };
+
+        const populateDropdown = (speciesList) => {
+            elements.speciesSelect.innerHTML = '<option value="">Select a species...</option>';
+            
+            speciesList.forEach(species => {
+                const option = document.createElement('option');
+                option.value = species.name;
+                option.textContent = species.display_name || species.name.replace(/_/g, ' ');
+                elements.speciesSelect.appendChild(option);
+            });
+        };
+
+        const loadAssemblyData = async (speciesName) => {
+            try {
+                showLoadingState();
+                
+                const response = await fetch(`${API_URL}/info/assembly/${speciesName}`, {
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const assemblyData = await response.json();
+                displayResults(assemblyData, speciesName);
+                
+            } catch (error) {
+                console.error("Error loading the assembly data:", error);
+                showErrorMessage("Failed to load the assembly info. Try looking foranother species.");
+            }
+        };
+
+        const displayResults = (data, speciesName) => {
+            // Show and hide the elements
+            elements.resultsDiv.style.display = 'block';
+            elements.loadingDiv.style.display = 'none';
+            elements.errorDiv.style.display = 'none';
+            elements.speciesContent.style.display = 'block';
+            
+            const displayName = getDisplayName(speciesName);
+            elements.speciesNameDiv.textContent = displayName;
+            
+            const totalLength = calculateTotalLength(data.top_level_region);
+            elements.totalLengthDiv.textContent = `Total Length: ${formatLength(totalLength)}`;
+            
+            // Display chromosomes data
+            displayChromosomes(data.top_level_region);
+        };
+
+        const getDisplayName = (speciesName) => {
+            const option = Array.from(elements.speciesSelect.options).find(opt => opt.value === speciesName);
+            return option ? option.textContent : speciesName.replace(/_/g, ' ');
+        };
+
+        const calculateTotalLength = (regions) => {
+            if (!regions) return 0;
+            return regions.reduce((total, region) => total + region.length, 0);
+        };
+
+        const formatLength = (length) => {
+            if (length >= 1000000) {
+                return `${(length / 1000000).toFixed(2)} Mb`;
+            } else if (length >= 1000) {
+                return `${(length / 1000).toFixed(2)} Kb`;
+            } else {
+                return `${length} bp`;
+            }
+        };
+
+        const displayChromosomes = (regions) => {
+            elements.chromosomeListDiv.innerHTML = '';
+            
+            if (!regions || regions.length === 0) {
+                elements.chromosomeListDiv.innerHTML = '<div class="error">No chromosome info available</div>';
+                return;
+            }
+            
+            // Sort chromosomes
+            const sortedRegions = sortChromosomes(regions);
+            
+            // Create chromosome list
+            sortedRegions.forEach(region => {
+                const chromosomeRow = createChromosomeRow(region);
+                elements.chromosomeListDiv.appendChild(chromosomeRow);
+            });
+        };
+
+        const createChromosomeRow = (region) => {
+            const row = document.createElement('div');
+            row.className = 'chromosome';
+            
+            const nameElement = document.createElement('div');
+            nameElement.className = 'chr-number';
+            nameElement.textContent = `${region.name}:`;
+            
+            const lengthElement = document.createElement('div');
+            lengthElement.className = 'chr-length';
+            lengthElement.textContent = formatLength(region.length);
+            
+            row.appendChild(nameElement);
+            row.appendChild(lengthElement);
+            
+            return row;
+        };
+
+        const sortChromosomes = (regions) => {
+            return regions.sort((a, b) => {
+                const aName = a.name;
+                const bName = b.name;
+                
+                // If the chromosomes are numeric (1, 2, 3, etc.)
+                const aNum = parseInt(aName);
+                const bNum = parseInt(bName);
+                
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                    return aNum - bNum;
+                }
+                
+                // Put numeric chromosomes first
+                if (!isNaN(aNum) && isNaN(bNum)) return -1;
+                if (isNaN(aNum) && !isNaN(bNum)) return 1;
+                
+                // Sort the special chromosomes (X, Y, MT)
+                const specialOrder = { 'X': 1, 'Y': 2, 'MT': 3 };
+                const aOrder = specialOrder[aName] || 99;
+                const bOrder = specialOrder[bName] || 99;
+                
+                if (aOrder !== bOrder) {
+                    return aOrder - bOrder;
+                }
+                
+                // Continue with alphabetical chromosome names
+                return aName.localeCompare(bName);
+            });
+        };
+
+        // Some ui functions
+        const showLoadingState = () => {
+            elements.resultsDiv.style.display = 'block';
+            elements.loadingDiv.style.display = 'block';
+            elements.speciesContent.style.display = 'none';
+            elements.errorDiv.style.display = 'none';
+        };
+
+        const showErrorMessage = (message) => {
+            elements.resultsDiv.style.display = 'block';
+            elements.loadingDiv.style.display = 'none';
+            elements.speciesContent.style.display = 'none';
+            elements.errorDiv.style.display = 'block';
+            elements.errorDiv.textContent = message;
+        };
+
+        // Adding an event handler on species change
+        const handleSpeciesChange = () => {
+            const selectedSpecies = elements.speciesSelect.value;
+            if (selectedSpecies) {
+                loadAssemblyData(selectedSpecies);
+            } else {
+                elements.resultsDiv.style.display = 'none';
+            }
+        };
+
+        // Initializing the app and loading the species list
+        elements.speciesSelect.addEventListener('change', handleSpeciesChange);
+        loadSpeciesList();
+    </script>
+</body>
+</html>
